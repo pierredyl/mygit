@@ -62,6 +62,11 @@ string sha256(string s) {
 
 //Adds a file to the staging area.
 void add (string file) {
+    if (!filesystem::exists(".mygit/")) {
+        cout << "Must initialize a mygit repository first using mygit init." << endl;
+        exit(1);
+    }
+
     //Read the file and return it as a string.
     string fileToAdd = readFile(file);
 
@@ -71,7 +76,15 @@ void add (string file) {
 
     string hashedBlobString = sha256(blobString);
 
-    cout << hashedBlobString << endl;
+    string hashFolderName = hashedBlobString.substr(0,2);
+    string hashFileName = hashedBlobString.substr(2, hashedBlobString.length() - 1);
+
+    if (!filesystem::exists(".mygit/objects/" + hashFolderName + "/" + hashFileName)) {
+        filesystem::create_directory(".mygit/objects/" + hashFolderName);
+        ofstream hashFile (".mygit/objects/" + hashFolderName + "/" + hashFileName);
+        hashFile << blobString;
+    }
+
 }
 
 
