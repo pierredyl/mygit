@@ -56,8 +56,6 @@ string sha256(string s) {
     }
 
     return stream.str();
-
-
 }
 
 //Adds a file to the staging area.
@@ -85,6 +83,17 @@ void add (string file) {
         hashFile << blobString;
     }
 
+    //Add file to the staging area for commit.
+    ofstream indexFile(".mygit/index", ios::app);
+    if (indexFile.is_open()) {
+        string indexContents = hashedBlobString + " " + file + "\n";
+        indexFile << indexContents;
+        indexFile.close();
+        cout << "added " << file << " to the staging area." << endl;
+
+    } else {
+        cout << "Error opening index file." << endl;
+    }
 }
 
 
