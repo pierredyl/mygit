@@ -96,8 +96,6 @@ unsigned char hexCharToNum(char ch) {
 
 
 
-
-
 vector<unsigned char> hashStringToBinary(string s) {
     //32 byte hash string (for SHA256)
     vector<unsigned char> hash;
@@ -160,10 +158,40 @@ void writeBinaryToFile(const string& filename, vector<unsigned char>& data) {
 
 
 
+pair<string, string> parseConfigFile() {
+    ifstream configFile(".mygit/config");
+
+    if (!configFile.is_open()) {
+        cout << "Config file failed to open" << endl;
+        exit(1);
+    }
+
+    string line;
+    string name;
+    string email;
+
+
+    while (getline(configFile, line)) {
+        if (line.find("name =") != string::npos) {
+            name = line.substr(line.find_first_of("=") + 2, line.length());
+        } else if (line.find("email =") != string::npos) {
+            email = line.substr(line.find_first_of("=") + 2, line.length());
+            break;
+        }
+    }
+
+    configFile.close();
+
+    return make_pair(name, email);
+}
+
+
+
+
 //Handles commits. Retrieves all data from the index file, places it into a vector of structs,
 //converts hex string hashes to their binary interpretation, constructs the tree using that
 //binary interpretation, hashes that file for its filename, and writes its contents to that file.
-void commit() {
+void commit(string& message) {
 
     //Store all hashes and their corresponding files in a vector of entries.
     vector<IndexEntry> indexEntries;
@@ -240,6 +268,35 @@ void commit() {
     } else {
         cout << "tree already exists in objects." << endl;
     }
+
+    //Build commit object. <user, email>
+    pair<string, string> userInfo;
+
+    //Get user info from config file
+    userInfo = parseConfigFile();
+
+    string commitData = "tree " + hashedTree + "\n" + "author " + userInfo.first + " <" + userInfo.second + ">" + "\n" +
+        "committer " + userInfo.first + " <" + userInfo.second + ">" + "\n" + message;
+
+    cout << "\ncomitting data: \n" << commitData;
+
+    int commitSize = commitData.size();
+    string commitObject = "commit " + to_string(commitSize) + '\0' + commitData;
+    string commitObjectHash = sha256(commitObject);
+
+    //create directory for commitFile.
+    filesystem::create_directory(".mygit/objects/" + commitObjectHash.substr(0,2));
+
+    string commitFileDir = ".mygit/objects/" + commitObjectHash.substr(0, 2) + "/" +
+        commitObjectHash.substr(2, commitObjectHash.length());
+
+    //Convert the commitObject into a vector of characters for compression.
+    vector<unsigned char> commitObjectVec(commitObject.begin(), commitObject.end());
+
+    vector<unsigned char> compressedObjectFile = compressUsingDeflate(commitObjectVec);
+
+    //Write the compressed commit object to its file
+    writeBinaryToFile(commitFileDir, compressedObjectFile);
 }
 
 
@@ -262,7 +319,7 @@ void add (string file) {
     string hashedBlobString = sha256(blobString);
 
     string hashFolderName = hashedBlobString.substr(0,2);
-    string hashFileName = hashedBlobString.substr(2, hashedBlobString.length() - 1);
+    string hashFileName = hashedBlobString.substr(2, hashedBlobString.length());
 
     if (!filesystem::exists(".mygit/objects/" + hashFolderName + "/" + hashFileName)) {
         filesystem::create_directory(".mygit/objects/" + hashFolderName);
@@ -286,6 +343,29 @@ void add (string file) {
 
 
 
+void config() {
+    if (!filesystem::exists(".mygit/config")) {
+        ofstream configFile(".mygit/config");
+
+        string name;
+        string email;
+
+        cout << "enter name: ";
+        getline(cin, name);
+        cout << "enter email: ";
+        getline(cin, email);
+
+        configFile << "[user]\n" << "name = " << name << "\nemail = " << email << endl;
+
+        cout << "created config file for: " << name << endl;
+    } else {
+        cout << "Config file already exists." << endl;
+    }
+
+}
+
+
+
 int main(int argc, char* argv[]) {
     cout << "Running mygit" << endl;
 
@@ -302,6 +382,19 @@ int main(int argc, char* argv[]) {
         string fileToAdd = argv[2];
         add(fileToAdd);
     } else if (command == "commit") {
-        commit();
+        if (argc < 3) {
+            cout << "Usage: ./mygit commit -m [message]" << endl;
+            return 1;
+        }
+
+        string commitMessage;
+        for (int i = 3; i < argc; i++) {
+            commitMessage += string(argv[i]) + " ";
+        }
+
+        commit(commitMessage);
+
+    } else if (command == "config") {
+        config();
     }
 }
