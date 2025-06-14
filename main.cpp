@@ -14,7 +14,7 @@ struct IndexEntry {
 };
 
 const string NORMAL_FILE_MODE = "100644";
-const int CHUNK_SIZE = 16384;
+constexpr int CHUNK_SIZE = 16384;
 
 
 
@@ -35,8 +35,8 @@ string readFile(const string& filePath) {
 
 
 
-//Initializes a local mygit repository.
-void init () {
+//Creates the paths and files necessary for a mygit repository.
+void createRootPaths() {
     string repoPath = ".mygit/";
 
     if (!filesystem::exists(repoPath)) {
@@ -44,14 +44,42 @@ void init () {
 
         string objectsPath = repoPath + "objects/";
         string refsPath = repoPath + "refs/";
+        string headsRefsPath = refsPath + "heads/";
 
         filesystem::create_directory(objectsPath);
         filesystem::create_directory(refsPath);
+        filesystem::create_directory(headsRefsPath);
+
         ofstream headFile (repoPath + "HEAD");
         ofstream indexFile (repoPath + "index");
+        ofstream refsFile (headsRefsPath + "main");
+
+        //Write current state to HEAD file
+        indexFile.close();
+        refsFile.close();
+
+        if (headFile.is_open()) {
+            string refsLink = "ref: refs/heads/main";
+            headFile << refsLink;
+            headFile.close();
+        } else {
+            cout << "Failed writing to headFile" << endl;
+            headFile.close();
+        }
+
+
+        cout << "created a mygit repository on the main branch" << endl;
     } else {
         cout << "mygit repository already created" << endl;
     }
+}
+
+
+
+
+//Initializes a local mygit repository.
+void init () {
+    createRootPaths();
 }
 
 
@@ -158,7 +186,7 @@ void writeBinaryToFile(const string& filename, vector<unsigned char>& data) {
 
 
 
-pair<string, string> parseConfigFile() {
+pair<string, string> parseConfigFileForUser() {
     ifstream configFile(".mygit/config");
 
     if (!configFile.is_open()) {
@@ -188,14 +216,25 @@ pair<string, string> parseConfigFile() {
 
 
 
-//Handles commits. Retrieves all data from the index file, places it into a vector of structs,
-//converts hex string hashes to their binary interpretation, constructs the tree using that
-//binary interpretation, hashes that file for its filename, and writes its contents to that file.
-void commit(string& message) {
+string parseHeadForBranch(ifstream& headFile) {
+    string line;
 
-    //Store all hashes and their corresponding files in a vector of entries.
-    vector<IndexEntry> indexEntries;
+    //only check for main right now. Can support other branches later. Simple parsing.
+    while (getline(headFile, line)) {
+        if (line.find("ref:") != string::npos) {
+            string branchLocation = line.substr(line.find_first_of(":") + 2, line.length());
+            return branchLocation;
+        }
+    }
+    exit(1);
+}
 
+
+
+
+//Collects all index entries from the index file and stores them in a vector of <IndexEntry>
+vector<IndexEntry> collectAllIndexEntries() {
+    vector<IndexEntry> entries;
     ifstream indexFile(".mygit/index");
     string line;
 
@@ -204,24 +243,19 @@ void commit(string& message) {
             istringstream iss(line);
             IndexEntry entry;
             iss >> entry.hashString >> entry.path;
-            indexEntries.push_back(entry);
+            entries.push_back(entry);
         }
     } else {
         cout << "Error opening index file" << endl;
     }
 
     indexFile.close();
+    return entries;
+}
 
-    cout << "Reading from the staging area" << endl;
-    for (int i = 0; i < indexEntries.size(); i++) {
-        cout << indexEntries[i].hashString << " " << indexEntries[i].path << endl;
-    }
 
-    //Convert hash strings to their binary representation and store it.
-    for (int i = 0; i < indexEntries.size(); i++) {
-        indexEntries[i].hashBinary = hashStringToBinary(indexEntries[i].hashString);
-    }
-
+//Builds the commit tree from all of the entries in the index file and returns the hash of the tree.
+string buildCommitTree(vector<IndexEntry>& indexEntries) {
     vector<unsigned char> tree;
     //Construct the tree for all entries in the index.
     for (int i = 0; i < indexEntries.size(); i++) {
@@ -269,20 +303,53 @@ void commit(string& message) {
         cout << "tree already exists in objects." << endl;
     }
 
+    return hashedTree;
+}
+
+
+
+
+//Builds the commit object given a commit tree is made and a message is provided.
+void buildCommitObject(string hashedTree, string& message) {
+
+    string mainBranchFile = ".mygit/refs/heads/main";
+    string commitData;
+
     //Build commit object. <user, email>
     pair<string, string> userInfo;
 
     //Get user info from config file
-    userInfo = parseConfigFile();
+    userInfo = parseConfigFileForUser();
 
-    string commitData = "tree " + hashedTree + "\n" + "author " + userInfo.first + " <" + userInfo.second + ">" + "\n" +
-        "committer " + userInfo.first + " <" + userInfo.second + ">" + "\n" + message;
+    //Before comitting current object, check if there is a previous commit. If there isn't, commit object has
+    //no parent hash.
+    if (!filesystem::is_empty(mainBranchFile)) {
+
+        //Read the previous commit hash
+        ifstream file(mainBranchFile);
+
+        if (file.is_open()) {
+            string previousCommitHash;
+            //Branch file will only have one hash, which is the previous commit objects hash.
+            getline(file, previousCommitHash);
+
+            commitData = "tree " + hashedTree + "\n" + "parent " + previousCommitHash + "\n" +"author "
+            + userInfo.first + " <" + userInfo.second + ">" + "\n" + "committer "
+            + userInfo.first +" <" + userInfo.second + ">" + "\n" + message;
+        } else {
+            cout << "Unable to open main branch file" << endl;
+        }
+    } else {
+        commitData = "tree " + hashedTree + "\n" + "author " + userInfo.first + " <" + userInfo.second + ">" + "\n" +
+            "committer " + userInfo.first + " <" + userInfo.second + ">" + "\n" + message;
+    }
 
     cout << "\ncomitting data: \n" << commitData;
 
     int commitSize = commitData.size();
     string commitObject = "commit " + to_string(commitSize) + '\0' + commitData;
     string commitObjectHash = sha256(commitObject);
+    cout << "Creating a new commit object with hash: " << commitObjectHash << endl;
 
     //create directory for commitFile.
     filesystem::create_directory(".mygit/objects/" + commitObjectHash.substr(0,2));
@@ -297,6 +364,42 @@ void commit(string& message) {
 
     //Write the compressed commit object to its file
     writeBinaryToFile(commitFileDir, compressedObjectFile);
+
+    //Update HEAD
+    ifstream headFile(".mygit/HEAD");
+    string branchLocation = parseHeadForBranch(headFile);
+
+    //Write commit hash to branch file inside heads.
+    ofstream branchFileLocation(".mygit/" + branchLocation);
+
+    if (branchFileLocation.is_open()) {
+        branchFileLocation << commitObjectHash;
+    } else {
+        cout << "Failed to open branch heads file" << endl;
+    }
+}
+
+
+
+
+//Handles commits. Retrieves all data from the index file, places it into a vector of structs,
+//converts hex string hashes to their binary interpretation, constructs the tree using that
+//binary interpretation, hashes that file for its filename, and writes its contents to that file.
+void commit(string& message) {
+
+    //Store all hashes and their corresponding files in a vector of entries.
+    vector<IndexEntry> indexEntries = collectAllIndexEntries();
+
+    //Convert hash strings to their binary representation and store it.
+    for (int i = 0; i < indexEntries.size(); i++) {
+        indexEntries[i].hashBinary = hashStringToBinary(indexEntries[i].hashString);
+    }
+
+    //Call buildCommitTree to build the tree, and get the hash of that tree.
+    string hashedTree = buildCommitTree(indexEntries);
+
+    //Call buildCommitObject to build the commit object using the commit message and tree hash.
+    buildCommitObject(hashedTree, message);
 }
 
 
