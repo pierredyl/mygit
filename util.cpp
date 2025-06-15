@@ -10,15 +10,6 @@ using namespace std;
 
 
 
-//Logs all previous commits to the console.
-void log() {
-    //Read the
-
-
-
-}
-
-
 //Reads a file into a string. Returns the string representation of the entire file.
 string readFile(const string& filePath) {
     ifstream file = ifstream(filePath, ios::binary);
@@ -102,24 +93,91 @@ vector<unsigned char> compressUsingDeflate(vector<unsigned char> original) {
     defstream.zfree = Z_NULL;
     defstream.opaque = Z_NULL;
 
-    deflateInit(&defstream, Z_DEFAULT_COMPRESSION);
+    unsigned char out[CHUNK_SIZE];
+    size_t have;
 
-    defstream.avail_in = original.size();
+    int ret = deflateInit(&defstream, Z_DEFAULT_COMPRESSION);
+    if (ret != Z_OK) {
+        cout << "deflateInit failed" << endl;
+        return {};
+    }
 
-    //Points to the vectors first location in memory.
+    //Size of bytes in vector
+    defstream.avail_in =  original.size();
+
+    //Pointer to first location in memory of vector
     defstream.next_in = original.data();
 
-    unsigned char out[CHUNK_SIZE];
 
     do {
         defstream.next_out = out;
         defstream.avail_out = CHUNK_SIZE;
 
-        deflate(&defstream, Z_FINISH);
+        ret = deflate(&defstream, Z_FINISH);
 
-        size_t have = CHUNK_SIZE - defstream.avail_out;
+        if (ret != Z_STREAM_END && ret != Z_OK && ret != Z_BUF_ERROR) {
+            cout << "deflate failed with code: " << ret << endl;
+            deflateEnd(&defstream);
+            return {};
+        }
+
+        have = CHUNK_SIZE - defstream.avail_out;
         result.insert(result.end(), out, out + have);
+
     } while (defstream.avail_out == 0);
+
+    // clean up and return
+    (void)deflateEnd(&defstream);
+
+    return result;
+}
+
+
+
+
+//Decompresses a file using zlib and its inflate algorithm
+vector<unsigned char> decompressUsingInflate(vector<unsigned char> original) {
+    vector<unsigned char> result;
+
+    int ret;
+    z_stream defstream{};
+    size_t have;
+
+    defstream.zalloc = Z_NULL;
+    defstream.zfree = Z_NULL;
+    defstream.opaque = Z_NULL;
+
+    unsigned char out[CHUNK_SIZE];
+
+
+    ret = inflateInit(&defstream);
+    if (ret != Z_OK) {
+        cout << "inflateInit failed" << endl;
+        return {};
+    }
+
+    defstream.avail_in = original.size();
+    defstream.next_in = original.data();
+
+    do {
+        defstream.next_out = out;
+        defstream.avail_out = CHUNK_SIZE;
+
+        ret = inflate(&defstream, Z_NO_FLUSH);
+
+        if (ret != Z_STREAM_END && ret != Z_OK && ret != Z_BUF_ERROR) {
+            cout << "inflate failed: " << ret << endl;
+            inflateEnd(&defstream);
+            return {};
+        }
+
+
+        have = CHUNK_SIZE - defstream.avail_out;
+        result.insert(result.end(), out, out + have);
+
+    } while (defstream.avail_out == 0);
+
+    (void)inflateEnd(&defstream);
 
     return result;
 }

@@ -30,6 +30,7 @@ unsigned char hexCharToNum(char);
 vector<unsigned char> hashStringToBinary(string);
 string sha256(string);
 vector<unsigned char> compressUsingDeflate(vector<unsigned char>);
+vector<unsigned char> decompressUsingInflate(vector<unsigned char>);
 void writeBinaryToFile(const string&, vector<unsigned char>&);
 pair<string, string> parseConfigFileForUser();
 string parseHeadForBranch(ifstream&);
