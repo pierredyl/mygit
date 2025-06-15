@@ -9,6 +9,16 @@
 using namespace std;
 
 
+
+//Logs all previous commits to the console.
+void log() {
+    //Read the
+
+
+
+}
+
+
 //Reads a file into a string. Returns the string representation of the entire file.
 string readFile(const string& filePath) {
     ifstream file = ifstream(filePath, ios::binary);
@@ -160,6 +170,7 @@ pair<string, string> parseConfigFileForUser() {
 
 
 
+//Parses the head file for the branch information. Returns this branch information.
 string parseHeadForBranch(ifstream& headFile) {
     string line;
 

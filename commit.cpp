@@ -150,4 +150,9 @@ void commit(string& message) {
 
     //Call buildCommitObject to build the commit object using the commit message and tree hash.
     buildCommitObject(hashedTree, message);
+
+    //Clear the staging area.
+    ofstream indexFile(".mygit/index");
+    indexFile.clear();
+    indexFile.close();
 }
