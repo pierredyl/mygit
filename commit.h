@@ -21,6 +21,7 @@ const string NORMAL_FILE_MODE = "100644";
 string buildCommitTree(vector<IndexEntry>&);
 void buildCommitObject(string, string&);
 void commit(string&);
+void commitLog();
 
 
 #endif //COMMIT_H

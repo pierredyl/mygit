@@ -40,5 +40,7 @@ int main(int argc, char* argv[]) {
 
     } else if (command == "config") {
         config();
+    } else if (command == "log") {
+        commitLog();
     }
 }

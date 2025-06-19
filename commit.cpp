@@ -4,6 +4,76 @@
 
 #include "commit.h"
 
+
+//Logs all previous commits.
+void commitLog() {
+    ifstream headFile(".mygit/HEAD");
+    ifstream branchFile(".mygit/" + parseHeadForBranch(headFile));
+
+
+    string commitHash;
+    string commitObject;
+    string parentHash;
+    bool parentFound;
+
+
+    //Get latest commit object file
+    if (branchFile.is_open()) {
+        getline(branchFile, commitHash);
+        commitObject = commitHash.substr(0,2) + "/" + commitHash.substr(2, commitHash.length());
+
+        branchFile.close();
+    } else {
+        cout << "Branch file failed to open" << endl;
+    }
+
+
+        do {
+            ifstream commitObjectFile(".mygit/objects/" + commitObject, ios::binary);
+
+            if (!commitObjectFile.is_open()) {
+                cout << "Failed to open commit object file" << endl;
+                break;
+            }
+
+            cout << "Opening: " << ".mygit/objects/" + commitObject << endl;
+
+            //Convert commit object file
+            vector<char> dataSigned{istreambuf_iterator<char>(commitObjectFile), istreambuf_iterator<char>()};
+
+            commitObjectFile.close();
+
+            vector<unsigned char> data(dataSigned.begin(), dataSigned.end());
+
+            //Decompress commit object file
+            vector<unsigned char> decompressedData = decompressUsingInflate(data);
+
+
+            //String holds all of commit file contents
+            string commitObjectContents(decompressedData.begin(), decompressedData.end());
+
+            cout << commitObjectContents << "\n\n";
+
+
+            //Extract the parent hash from the string
+            if (commitObjectContents.find("parent ") != string::npos) {
+                parentFound = true;
+                int hashStart = commitObjectContents.find("parent ") + 7;
+                int hashLength = 64;
+
+
+                parentHash = commitObjectContents.substr(hashStart,
+                    2) + "/" + commitObjectContents.substr(hashStart + 2, hashLength - 2);
+
+                //Make the parent hash the new current commit object
+                commitObject = parentHash;
+            } else {
+                parentFound = false;
+            }
+        } while (parentFound);
+
+}
+
 //Builds the commit tree from all of the entries in the index file and returns the hash of the tree.
 string buildCommitTree(vector<IndexEntry>& indexEntries) {
     vector<unsigned char> tree;
@@ -83,12 +153,16 @@ void buildCommitObject(string hashedTree, string& message) {
             //Branch file will only have one hash, which is the previous commit objects hash.
             getline(file, previousCommitHash);
 
+            file.close();
+
             commitData = "tree " + hashedTree + "\n" + "parent " + previousCommitHash + "\n" +"author "
             + userInfo.first + " <" + userInfo.second + ">" + "\n" + "committer "
             + userInfo.first +" <" + userInfo.second + ">" + "\n" + message;
         } else {
             cout << "Unable to open main branch file" << endl;
         }
+
+
     } else {
         commitData = "tree " + hashedTree + "\n" + "author " + userInfo.first + " <" + userInfo.second + ">" + "\n" +
             "committer " + userInfo.first + " <" + userInfo.second + ">" + "\n" + message;
@@ -127,6 +201,8 @@ void buildCommitObject(string hashedTree, string& message) {
     } else {
         cout << "Failed to open branch heads file" << endl;
     }
+
+    branchFileLocation.close();
 }
 
 
