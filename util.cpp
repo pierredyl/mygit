@@ -21,6 +21,8 @@ string readFile(const string& filePath) {
 
     stringstream buffer;
     buffer << file.rdbuf();
+    file.close();
+
     return buffer.str();
 }
 
@@ -187,12 +189,14 @@ vector<unsigned char> decompressUsingInflate(vector<unsigned char> original) {
 
 //Function to handle writing binary data to a file.
 void writeBinaryToFile(const string& filename, vector<unsigned char>& data) {
-    ofstream file(filename);
+    ofstream file(filename, ios::binary);
     if (file.is_open()) {
         file.write(reinterpret_cast<const char*>(data.data()), data.size());
     } else {
         cout << "Failed creating file " << filename << endl;
     }
+
+    file.close();
 }
 
 
@@ -236,6 +240,7 @@ string parseHeadForBranch(ifstream& headFile) {
     while (getline(headFile, line)) {
         if (line.find("ref:") != string::npos) {
             string branchLocation = line.substr(line.find_first_of(":") + 2, line.length());
+            headFile.close();
             return branchLocation;
         }
     }
